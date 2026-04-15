@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Twyford Care Mileage Tracker</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Twyford Tracker">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+    <style>
+        :root { 
+            --bg: #f0f4f8; --card: #ffffff; --primary: #0070f3; 
+            --success: #27ae60; --text: #334155; --label: #64748b;
+            --accent: #7c3aed; --warning: #f59e0b; --border: #e2e8f0;
+        }
+        
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; display: flex; justify-content: center; }
+        #app { width: 100%; max-width: 420px; }
+        #disclaimer-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 1000; display: flex; align-items: center; padding: 20px; box-sizing: border-box; }
+        .card { background: var(--card); padding: 20px; border-radius: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid var(--border); }
+        h1 { text-align: center; color: var(--primary); font-size: 18px; margin: 10px 0; font-weight: 800; text-transform: uppercase; }
+        label { font-size: 11px; font-weight: 700; color: var(--label); text-transform: uppercase; display: block; margin-bottom: 5px; }
+        input { width: 100%; padding: 14px; margin: 5px 0 10px 0; border-radius: 12px; border: 2px solid var(--border); background: #f8fafc; color: var(--text); font-size: 16px; box-sizing: border-box; outline: none; }
+        
+        .preset-tag { 
+            display: inline-flex; align-items: center; background: #edf2f7; 
+            padding: 6px 12px; border-radius: 25px; font-size: 12px; 
+            margin: 0 5px 8px 0; border: 1px solid var(--border); color: var(--primary); font-weight: 600; cursor: pointer; 
+        }
+        .del-btn { margin-left: 8px; color: #ef4444; font-size: 16px; font-weight: bold; padding: 0 4px; }
+        
+        button { width: 100%; padding: 18px; border-radius: 14px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
+        .btn-start { background: var(--primary); color: white; }
+        .btn-stop { background: var(--success); color: white; }
+        .btn-next { background: var(--accent); color: white; }
+        .btn-home { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+        .btn-copy { background: var(--warning); color: white; }
+
+        #log-output { background: #f8fafc; padding: 15px; border-radius: 12px; font-family: monospace; border: 1px solid var(--border); font-size: 12px; white-space: pre-wrap; line-height: 1.5; margin-bottom: 10px; }
+        .hidden { display: none; }
+        .live-indicator { text-align: center; font-size: 11px; color: #ef4444; font-weight: 800; margin-bottom: 10px; animation: blink 1.5s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    </style>
+</head>
+<body>
+
+<div id="disclaimer-overlay">
+    <div class="card">
+        <h2 style="color:var(--primary); margin-top:0;">Hi Guys! 👋</h2>
+        <p>I made this <b>Twyford Care Mileage Tracker</b> to make our life easier. Start a trip, add stops as you go, and <b>Copy Report</b> at the end of the shift.</p>
+        <button class="btn-start" onclick="document.getElementById('disclaimer-overlay').style.display='none'">START TRACKER</button>
+    </div>
+</div>
+
+<div id="app">
+    <h1>Twyford Care</h1>
+
+    <div id="view-setup" class="card">
+        <label>Who are you supporting?</label>
+        <div id="res-presets" style="margin-bottom: 5px;"></div>
+        <input type="text" id="input-res" placeholder="Staff or Resident Name">
+        
+        <label>Starting From</label>
+        <input type="text" id="input-start" placeholder="e.g. House">
+
+        <label>Going To</label>
+        <div id="dest-presets" style="margin-bottom: 5px;"></div>
+        <input type="text" id="input-dest" placeholder="e.g. Aldi">
+        
+        <button class="btn-start" onclick="startTracking()">START TRIP</button>
+    </div>
+
+    <div id="view-active" class="card hidden">
+        <div class="live-indicator">● LIVE TRACKING ACTIVE</div>
+        <div style="text-align:center; font-size:48px; font-weight:900; margin:10px 0;" id="live-miles">0.00 mi</div>
+        <button class="btn-stop" id="main-stop-btn" onclick="arrive()">I'VE ARRIVED</button>
+        
+        <div id="post-arrival-options" class="hidden">
+            <button class="btn-next" onclick="prepareNextLeg()">➕ ADD ANOTHER STOP</button>
+            <button class="btn-next" id="btn-return-home" style="background:#4b5563;" onclick="returnToOrigin()">🔄 RETURN TO START</button>
+            <button class="btn-home" onclick="finishAndHome()">🏠 FINISH & LOG TRIP</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <label>Daily Report</label>
+        <div id="log-output">No trips logged today.</div>
+        <button class="btn-copy" onclick="copyLogs()">COPY REPORT</button>
+        <button style="background:transparent; color:#94a3b8; font-size:11px; text-decoration:underline; border:none; box-shadow:none; cursor:pointer;" onclick="resetAll()">Clear Shift Data</button>
+    </div>
+</div>
+
+<script>
+    let activeJourney = null;
+    let originalStartPoint = ""; 
+
+    function getSavedData() {
+        return {
+            logs: JSON.parse(localStorage.getItem('twy_logs')) || [],
+            presets: JSON.parse(localStorage.getItem('twy_presets')) || { res: [], dest: [] }
+        };
+    }
+
+    function saveToPhone(logs, presets) {
+        localStorage.setItem('twy_logs', JSON.stringify(logs));
+        localStorage.setItem('twy_presets', JSON.stringify(presets));
+        updateDisplay();
+    }
+
+    let watchId, startPos, currentMiles = 0;
+
+    function updateDisplay() {
+        const data = getSavedData();
+        const resDiv = document.getElementById('res-presets');
+        const destDiv = document.getElementById('dest-presets');
+        
+        resDiv.innerHTML = data.presets.res.map((name, i) => `
+            <span class="preset-tag" onclick="setInput('input-res','${name}')">${name} 
+                <span class="del-btn" onclick="deleteItem(event, 'res', ${i})">×</span>
+            </span>`).join('');
+
+        destDiv.innerHTML = data.presets.dest.map((place, i) => `
+            <span class="preset-tag" onclick="setInput('input-dest','${place}')">${place} 
+                <span class="del-btn" onclick="deleteItem(event, 'dest', ${i})">×</span>
+            </span>`).join('');
+
+        let logText = data.logs.length ? "--- TWYFORD CARE REPORT ---\n" : "No trips logged today.";
+        let total = 0; 
+        data.logs.forEach(trip => { 
+            logText += `• ${trip.res}: ${trip.route} (${trip.totalMiles} mi)\n`; 
+            total += parseFloat(trip.totalMiles); 
+        });
+        if(data.logs.length) logText += `\nTOTAL MILES FOR DAY: ${total.toFixed(2)}`;
+        document.getElementById('log-output').innerText = logText;
+    }
+
+    function setInput(id, val) { document.getElementById(id).value = val; }
+
+    function deleteItem(e, type, index) {
+        e.stopPropagation();
+        const data = getSavedData();
+        data.presets[type].splice(index, 1);
+        saveToPhone(data.logs, data.presets);
+    }
+
+    function getDist(p1, p2) {
+        const R = 3958.8;
+        const dLat = (p2.latitude - p1.latitude) * Math.PI / 180;
+        const dLon = (p2.longitude - p1.longitude) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(p1.latitude * Math.PI/180) * Math.cos(p2.latitude * Math.PI/180) * Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function startTracking() {
+        const rName = document.getElementById('input-res').value.trim();
+        const sPoint = document.getElementById('input-start').value.trim();
+        const dPoint = document.getElementById('input-dest').value.trim();
+        
+        if(!rName || !sPoint || !dPoint) return alert("Please fill in Resident, Start, and Destination!");
+
+        if(!activeJourney) {
+            originalStartPoint = sPoint; // Lock in the first "House"
+            activeJourney = {
+                res: rName,
+                route: sPoint + " - " + dPoint,
+                totalMiles: 0
+            };
+        } else {
+            activeJourney.route += " - " + dPoint;
+        }
+
+        const data = getSavedData();
+        if(!data.presets.res.includes(rName)) data.presets.res.push(rName);
+        if(!data.presets.dest.includes(dPoint)) data.presets.dest.push(dPoint);
+        saveToPhone(data.logs, data.presets);
+
+        navigator.geolocation.getCurrentPosition(p => {
+            startPos = p.coords;
+            currentMiles = 0;
+            document.getElementById('view-setup').classList.add('hidden');
+            document.getElementById('view-active').classList.remove('hidden');
+            document.getElementById('main-stop-btn').classList.remove('hidden');
+            document.getElementById('post-arrival-options').classList.add('hidden');
+            
+            watchId = navigator.geolocation.watchPosition(pos => {
+                currentMiles = getDist(startPos, pos.coords);
+                document.getElementById('live-miles').innerText = currentMiles.toFixed(2) + " mi";
+            }, null, {enableHighAccuracy:true});
+        }, () => alert("GPS required!"));
+    }
+
+    function arrive() {
+        navigator.geolocation.clearWatch(watchId);
+        activeJourney.totalMiles = (parseFloat(activeJourney.totalMiles) + currentMiles).toFixed(2);
+        
+        document.getElementById('main-stop-btn').classList.add('hidden');
+        document.getElementById('post-arrival-options').classList.remove('hidden');
+        document.getElementById('btn-return-home').innerText = "🔄 RETURN TO " + originalStartPoint.toUpperCase();
+    }
+
+    function prepareNextLeg() {
+        const prevDest = document.getElementById('input-dest').value;
+        const next = prompt("Where is the next stop?", "");
+        if (next) {
+            document.getElementById('input-start').value = prevDest;
+            document.getElementById('input-dest').value = next;
+            startTracking();
+        }
+    }
+
+    function returnToOrigin() {
+        const prevDest = document.getElementById('input-dest').value;
+        document.getElementById('input-start').value = prevDest;
+        document.getElementById('input-dest').value = originalStartPoint;
+        startTracking();
+    }
+
+    function finishAndHome() {
+        const data = getSavedData();
+        data.logs.push(activeJourney);
+        saveToPhone(data.logs, data.presets);
+        
+        activeJourney = null;
+        originalStartPoint = "";
+        document.getElementById('view-setup').classList.remove('hidden');
+        document.getElementById('view-active').classList.add('hidden');
+        document.getElementById('input-start').value = "";
+        document.getElementById('input-dest').value = "";
+        updateDisplay();
+    }
+
+    function copyLogs() { 
+        navigator.clipboard.writeText(document.getElementById('log-output').innerText);
+        alert("Report copied!");
+    }
+    
+    function resetAll() { 
+        if(confirm("Clear everything?")) { 
+            localStorage.removeItem('twy_logs'); 
+            activeJourney = null;
+            updateDisplay();
+        } 
+    }
+    
+    updateDisplay();
+</script>
+</body>
+</html>
